@@ -94,6 +94,9 @@ struct ObjectFooter {
   // Gets memory from the OS
   void * getMemoryFromOS( size_t size );
 
+  // Gets a fenced memory chunk of the desired size
+  void * getFencedChunk(size_t size);
+
   void increaseMallocCalls() { _mallocCalls++; }
 
   void increaseReallocCalls() { _reallocCalls++; }
@@ -124,10 +127,13 @@ void initialize()
   // In verbose mode register also printing statistics at exit
   atexit( atExitHandlerInC );
 
-  //establish fence posts
+  // establish fence posts
+  // footer
   struct ObjectFooter * fencepost1 = (struct ObjectFooter *)_mem;
   fencepost1->_allocated = 1;
   fencepost1->_objectSize = 123456789;
+
+  // header
   char * temp = 
       (char *)_mem + (2*sizeof(struct ObjectFooter)) + sizeof(struct ObjectHeader) + ArenaSize;
   struct ObjectHeader * fencepost2 = (struct ObjectHeader *)temp;
@@ -136,13 +142,13 @@ void initialize()
   fencepost2->_next = NULL;
   fencepost2->_prev = NULL;
 
-  //initialize the list to point to the _mem
+  // initialize the list to point to the _mem
   temp = (char *) _mem + sizeof(struct ObjectFooter);
   struct ObjectHeader * currentHeader = (struct ObjectHeader *) temp;
   temp = (char *)_mem + sizeof(struct ObjectFooter) + sizeof(struct ObjectHeader) + ArenaSize;
   struct ObjectFooter * currentFooter = (struct ObjectFooter *) temp;
   _freeList = &_freeListSentinel;
-  currentHeader->_objectSize = ArenaSize + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter); //2MB
+  currentHeader->_objectSize = ArenaSize + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter); // 2MB + header and footer size
   currentHeader->_allocated = 0;
   currentHeader->_next = _freeList;
   currentHeader->_prev = _freeList;
@@ -182,6 +188,40 @@ void * allocateObject( size_t size )
 
 }
 
+// Returns the header address of the
+// first valid block from the list of available
+// memory blocks that is at least size bytes large.
+// Recall that headers contain the size of the memory block
+// INCLUDING the size of the header and footer.
+// Fortunately, this is already accounted for.
+struct ObjectHeader * getValidBlock(size_t size)
+{
+    struct ObjectHeader * current = _freeList->_next;
+
+    while (current != _freeList)
+    {
+        if (current->_objectSize >= size)
+        {
+            return current;
+        }
+        current = current->_next;
+    }
+
+    if (current == _freeList)
+    {
+        // No memory blocks large enough
+        // Create a new one
+
+        int request = ArenaSize + 2*sizeof(struct ObjectHeader) + 2*sizeof(struct ObjectFooter);
+        if (size > request) request = size;
+        void * chunk = getFencedChunk(request);
+
+        // Add it to the free list
+    }
+
+    return current;
+}
+
 void freeObject( void * ptr )
 {
   // Add your code here
@@ -190,13 +230,38 @@ void freeObject( void * ptr )
 
 }
 
+void * getFencedChunk(size_t size)
+{
+    void * _mem = getMemoryFromOS(size);
+
+    // establish fence posts
+    // footer
+    struct ObjectFooter * fencepost1 = (struct ObjectFooter *)_mem;
+    fencepost1->_allocated = 1;
+    fencepost1->_objectSize = 123456789;
+
+    // header
+    char * temp = (char *)_mem + (size - sizeof(struct ObjectHeader));
+    struct ObjectHeader * fencepost2 = (struct ObjectHeader *)temp;
+    fencepost2->_allocated = 1;
+    fencepost2->_objectSize = 123456789;
+    fencepost2->_next = NULL;
+    fencepost2->_prev = NULL;
+
+    return _mem;
+}
+
 size_t objectSize( void * ptr )
 {
   // Return the size of the object pointed by ptr. We assume that ptr is a valid obejct.
   struct ObjectHeader * o =
-    (struct ObjectHeader *) ( (char *) ptr - sizeof(struct ObjectHeader) );
+    (struct ObjectHeader *) ( (char *)ptr - sizeof(struct ObjectHeader) );
 
-  // Substract the size of the header
+  // Subtract the size of the header (Edit: and footer?)
+  // Why not already implemented?
+  // Seems like you shouldn't, actually.
+  // Only used in realloc() implementation below.
+  // Looks like size of header and footer are important.
   return o->_objectSize;
 }
 
