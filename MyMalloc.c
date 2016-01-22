@@ -231,24 +231,44 @@ void freeObject( void * ptr )
   
     // Get header and footer of object
     struct ObjectHeader * header = (struct ObjectHeader *)((char *)ptr - sizeof(struct ObjectHeader));
-    struct ObjectFooter * footer = (struct ObjectFooter *)((char *)ptr + header->_objectSize - sizeof(struct ObjectFooter));
+    struct ObjectFooter * footer = (struct ObjectFooter *)((char *)header + header->_objectSize - sizeof(struct ObjectFooter));
 
     // Deallocate memory
     header->_allocated = 0;
     footer->_allocated = 0;
 
     // Get first memory block in free list following this one
-    struct ObjectHeader * current = _freeList->_next;
+    struct ObjectHeader * following = _freeList->_next;
 
-    while (current < header && current != _freeList) {
-        current = current->_next;
+    while (following < header && following != _freeList) {
+        following = following->_next;
     }
 
     // And the one before that
-    struct ObjectHeader * preceding = current->_prev;
+    struct ObjectHeader * preceding = following->_prev;
 
     // Now cram it in between them
+    preceding->_next = header;
+    following->_prev = header;
+    header->_prev = preceding;
+    header->_next = following;
+
     // and coalesce it if necessary
+    if (preceding + preceding->_objectSize == header) {
+        preceding->_objectSize += header->_objectSize;
+        footer->_objectSize += preceding->_objectSize;
+        preceding->_next = following;
+        following->_prev = preceding;
+        header = preceding;
+    }
+
+    if (header + header->_objectSize == following) {
+        struct ObjectFooter * ff = (struct ObjectFooter *)((char *)following + following->_objectSize - sizeof(struct ObjectFooter));
+        header->_objectSize += following->_objectSize;
+        ff->_objectSize += header->_objectSize;
+        header->_next = following->_next;
+        following->_next->_prev = header;
+    }
 
     return;
 
