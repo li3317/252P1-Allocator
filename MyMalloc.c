@@ -18,6 +18,8 @@
 #include <pthread.h>
 #include "MyMalloc.h"
 
+#define MIN_SIZE 56
+
 static pthread_mutex_t mutex;
 
 const int ArenaSize = 2097152;
@@ -97,6 +99,9 @@ struct ObjectFooter {
   // Gets a fenced memory chunk of the desired size
   void * getFencedChunk(size_t size);
 
+  // Gets a valid free memory block from the list
+  struct ObjectHeader * getValidBlock(size_t roundedSize);
+
   void increaseMallocCalls() { _mallocCalls++; }
 
   void increaseReallocCalls() { _reallocCalls++; }
@@ -163,28 +168,57 @@ void initialize()
 
 void * allocateObject( size_t size )
 {
-  //Make sure that allocator is initialized
-  if ( !_initialized ) {
-    _initialized = 1;
-    initialize();
-  }
+    //Make sure that allocator is initialized
+    if ( !_initialized ) {
+      _initialized = 1;
+      initialize();
+    }
 
-  // Add the ObjectHeader/Footer to the size and round the total size up to a multiple of
-  // 8 bytes for alignment.
-  size_t roundedSize = (size + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter) + 7) & ~7;
+    // Minimum size = 8 bytes
+    if (size < 7) size = 8;
 
-  // Naively get memory from the OS every time
-  void * _mem = getMemoryFromOS( roundedSize );
+    // Add the ObjectHeader/Footer to the size and round the total size up to a multiple of
+    // 8 bytes for alignment.
+    size_t roundedSize = (size + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter) + 7) & ~7;
 
-  // Store the size in the header
-  struct ObjectHeader * o = (struct ObjectHeader *) _mem;
+    // My code here.
 
-  o->_objectSize = roundedSize;
+    // Get a block from the freelist that's large enough
+    struct ObjectHeader * o = getValidBlock(roundedSize);
+    struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + roundedSize - sizeof(struct ObjectFooter));
 
-  pthread_mutex_unlock(&mutex);
+    // Now cut the block into the part we need and the remainder
+    if (o->_objectSize >= MIN_SIZE + roundedSize) {
+        struct ObjectHeader * h = (struct ObjectHeader *)((char *)o + roundedSize);
+        struct ObjectHeader * following = o->_next;
+        following->_prev = h;
+        h->_next = following;
+        h->_prev = o;
+        o->_next = h;
+    }
 
-  // Return a pointer to usable memory
-  return (void *) (o + 1);
+    // Then remove the part we need from the freelist
+    struct ObjectHeader * p = o->_prev;
+    struct ObjectHeader * n = o->_next;
+    p->_next = n;
+    n->_prev = p;
+
+    // Set allocated to true
+    o->_allocated = 1;
+    f->_allocated = 1;
+
+    // Naively get memory from the OS every time
+    //void * _mem = getMemoryFromOS( roundedSize );
+
+    // Store the size in the header
+    //struct ObjectHeader * o = (struct ObjectHeader *) _mem;
+
+    o->_objectSize = roundedSize;
+
+    pthread_mutex_unlock(&mutex);
+
+    // Return a pointer to usable memory
+    return (void *) (o + 1);
 
 }
 
@@ -254,7 +288,11 @@ void freeObject( void * ptr )
     header->_next = following;
 
     // and coalesce it if necessary
-    if (preceding + preceding->_objectSize == header) {
+    // A note on this: memory blocks should never be allocated if
+    // they are in the free list, but we still need to check anyway
+    // to make sure that wedon' coalesce the sentinel. That would be
+    // bad.
+    if (preceding + preceding->_objectSize == header && !preceding->_allocated) {
         preceding->_objectSize += header->_objectSize;
         footer->_objectSize += preceding->_objectSize;
         preceding->_next = following;
@@ -262,7 +300,7 @@ void freeObject( void * ptr )
         header = preceding;
     }
 
-    if (header + header->_objectSize == following) {
+    if (header + header->_objectSize == following && !following->_allocated) {
         struct ObjectFooter * ff = (struct ObjectFooter *)((char *)following + following->_objectSize - sizeof(struct ObjectFooter));
         header->_objectSize += following->_objectSize;
         ff->_objectSize += header->_objectSize;
