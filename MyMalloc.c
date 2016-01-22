@@ -96,8 +96,8 @@ struct ObjectFooter {
   // Gets memory from the OS
   void * getMemoryFromOS( size_t size );
 
-  // Gets a fenced memory chunk of the desired size
-  void * getFencedChunk(size_t size);
+  // Gets a nicely and initialized fenced memory chunk of the desired size
+  struct ObjectHeader * getFencedChunk(size_t size);
 
   // Gets a valid free memory block from the list
   struct ObjectHeader * getValidBlock(size_t roundedSize);
@@ -249,9 +249,29 @@ struct ObjectHeader * getValidBlock(size_t size)
 
         int request = ArenaSize + 2*sizeof(struct ObjectHeader) + 2*sizeof(struct ObjectFooter);
         if (size > request) request = size;
-        void * chunk = getFencedChunk(request);
+        struct ObjectHeader * chunk = getFencedChunk(request);
 
         // Add it to the free list
+        
+        if (chunk < _freeList->_next) {
+            // Add to beginning of list
+            struct ObjectHeader * n = _freeList->_next;
+            _freeList->_next = chunk;
+            chunk->_prev = _freeList;
+            chunk->_next = n;
+            n->_prev = chunk;
+
+        } else if (chunk > _freeList->_prev) {
+            // Add to end of list
+            struct ObjectHeader * p = _freeList->_prev;
+            _freeList->_prev = chunk;
+            chunk->_next = _freeList;
+            chunk->_prev = p;
+            p->_next = chunk;
+        } else {
+            // Belongs somewhere in the middle
+            struct ObjectHeader * following = _freeList->_next;
+        }
     }
 
     return current;
@@ -313,7 +333,7 @@ void freeObject( void * ptr )
 
 }
 
-void * getFencedChunk(size_t size)
+struct ObjectHeader * getFencedChunk(size_t size)
 {
     void * _mem = getMemoryFromOS(size);
 
@@ -331,7 +351,17 @@ void * getFencedChunk(size_t size)
     fencepost2->_next = NULL;
     fencepost2->_prev = NULL;
 
-    return _mem;
+    // Now put in the actual header and footer and initialize them
+    struct ObjectHeader * h = (struct ObjectHeader *)((char *)fencepost1 + sizeof(struct ObjectFooter));
+    struct ObjectFooter * f = (struct ObjectFooter *)((char *)fencepost2 - sizeof(struct ObjectFooter));
+    h->_objectSize = size - 2*sizeof(struct ObjectHeader) - 2*sizeof(struct ObjectFooter);
+    h->_allocated = 0;
+    f->_objectSize = h->_objectSize;
+    h->_allocated = 0;
+    h->_next = NULL;
+    h->_prev = NULL;
+
+    return h;
 }
 
 size_t objectSize( void * ptr )
