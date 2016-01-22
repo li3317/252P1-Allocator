@@ -250,7 +250,6 @@ struct ObjectHeader * getValidBlock(size_t size)
         int request = ArenaSize + 2*sizeof(struct ObjectHeader) + 2*sizeof(struct ObjectFooter);
         if (size > request) request = size;
         struct ObjectHeader * chunk = getFencedChunk(request);
-        printf("Chunk fetched\n");
         // Add it to the free list
         
         if (chunk < _freeList->_next) {
