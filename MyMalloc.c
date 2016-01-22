@@ -195,6 +195,7 @@ void * allocateObject( size_t size )
         h->_next = following;
         h->_prev = o;
         o->_next = h;
+        h->_objectSize = o->_objectSize - roundedSize;
     }
 
     // Then remove the part we need from the freelist
@@ -292,7 +293,7 @@ void freeObject( void * ptr )
     // they are in the free list, but we still need to check anyway
     // to make sure that wedon' coalesce the sentinel. That would be
     // bad.
-    if (preceding + preceding->_objectSize == header && !preceding->_allocated) {
+    if ((char *)preceding + preceding->_objectSize == header && !preceding->_allocated) {
         preceding->_objectSize += header->_objectSize;
         footer->_objectSize += preceding->_objectSize;
         preceding->_next = following;
@@ -300,7 +301,7 @@ void freeObject( void * ptr )
         header = preceding;
     }
 
-    if (header + header->_objectSize == following && !following->_allocated) {
+    if ((char *)header + header->_objectSize == following && !following->_allocated) {
         struct ObjectFooter * ff = (struct ObjectFooter *)((char *)following + following->_objectSize - sizeof(struct ObjectFooter));
         header->_objectSize += following->_objectSize;
         ff->_objectSize += header->_objectSize;
