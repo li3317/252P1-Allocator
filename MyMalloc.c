@@ -166,6 +166,7 @@ void initialize()
   _memStart = (char*) currentHeader;
 }
 
+// Returns a pointer to a chunk of memory for an object of a given size.
 void * allocateObject( size_t size )
 {
     //Make sure that allocator is initialized
@@ -181,14 +182,12 @@ void * allocateObject( size_t size )
     // 8 bytes for alignment.
     size_t roundedSize = (size + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter) + 7) & ~7;
 
-    // My code here.
-
     // Get a block from the freelist that's large enough
     struct ObjectHeader * o = getValidBlock(roundedSize);
     struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + roundedSize - sizeof(struct ObjectFooter));
 
     // Now cut the block into the part we need and the remainder
-    if (o->_objectSize > MIN_SIZE + roundedSize) {
+    if (o->_objectSize >= MIN_SIZE + roundedSize) {
         struct ObjectHeader * h = (struct ObjectHeader *)((char *)o + roundedSize);
         struct ObjectHeader * following = o->_next;
         following->_prev = h;
