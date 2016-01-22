@@ -224,9 +224,33 @@ struct ObjectHeader * getValidBlock(size_t size)
 
 void freeObject( void * ptr )
 {
-  // Add your code here
+    // Add this memory block back into the freelist
+    // in the correct position, then coalesce it
+    // with any unallocated memory blocks adjacent
+    // to it
+  
+    // Get header and footer of object
+    struct ObjectHeader * header = (struct ObjectHeader *)((char *)ptr - sizeof(struct ObjectHeader));
+    struct ObjectFooter * footer = (struct ObjectFooter *)((char *)ptr + header->_objectSize - sizeof(struct ObjectFooter));
 
-  return;
+    // Deallocate memory
+    header->_allocated = 0;
+    footer->_allocated = 0;
+
+    // Get first memory block in free list following this one
+    struct ObjectHeader * current = _freeList->_next;
+
+    while (current < header && current != _freeList) {
+        current = current->_next;
+    }
+
+    // And the one before that
+    struct ObjectHeader * preceding = current->_prev;
+
+    // Now cram it in between them
+    // and coalesce it if necessary
+
+    return;
 
 }
 
