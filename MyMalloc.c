@@ -364,7 +364,7 @@ struct ObjectHeader * getFencedChunk(size_t size)
     // Now put in the actual header and footer and initialize them
     struct ObjectHeader * h = (struct ObjectHeader *)((char *)fencepost1 + sizeof(struct ObjectFooter));
     struct ObjectFooter * f = (struct ObjectFooter *)((char *)fencepost2 - sizeof(struct ObjectFooter));
-    h->_objectSize = size - 2*sizeof(struct ObjectHeader) - 2*sizeof(struct ObjectFooter);
+    h->_objectSize = size - sizeof(struct ObjectHeader) - sizeof(struct ObjectFooter);
     h->_allocated = 0;
     f->_objectSize = h->_objectSize;
     h->_allocated = 0;
