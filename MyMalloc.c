@@ -188,7 +188,7 @@ void * allocateObject( size_t size )
     struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + roundedSize - sizeof(struct ObjectFooter));
 
     // Now cut the block into the part we need and the remainder
-    if (o->_objectSize >= MIN_SIZE + roundedSize) {
+    if (o->_objectSize > MIN_SIZE + roundedSize) {
         struct ObjectHeader * h = (struct ObjectHeader *)((char *)o + roundedSize);
         struct ObjectHeader * following = o->_next;
         following->_prev = h;
@@ -271,6 +271,14 @@ struct ObjectHeader * getValidBlock(size_t size)
             // Belongs somewhere in the middle
             // Should only happen if multiple chunks have been added
             struct ObjectHeader * following = _freeList->_next;
+            while (chunk > following) {
+                following = following->_next;
+            }
+            struct ObjectHeader * preceding = following->_prev;
+            following->_prev = chunk;
+            preceding->_next = chunk;
+            chunk->_prev = preceding;
+            chunk->_next = following;
         }
 
         current = chunk;
