@@ -250,7 +250,7 @@ struct ObjectHeader * getValidBlock(size_t size)
         int request = ArenaSize + 2*sizeof(struct ObjectHeader) + 2*sizeof(struct ObjectFooter);
         if (size > request) request = size;
         struct ObjectHeader * chunk = getFencedChunk(request);
-
+        printf("Chunk fetched\n");
         // Add it to the free list
         
         if (chunk < _freeList->_next) {
@@ -270,8 +270,11 @@ struct ObjectHeader * getValidBlock(size_t size)
             p->_next = chunk;
         } else {
             // Belongs somewhere in the middle
+            // Should only happen if multiple chunks have been added
             struct ObjectHeader * following = _freeList->_next;
         }
+
+        current = chunk;
     }
 
     return current;
