@@ -187,7 +187,7 @@ void * allocateObject( size_t size )
     struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + roundedSize - sizeof(struct ObjectFooter));
 
     // Now cut the block into the part we need and the remainder
-    if (o->_objectSize >= MIN_SIZE + roundedSize) {
+    if (o->_objectSize > MIN_SIZE + roundedSize) {
         struct ObjectHeader * h = (struct ObjectHeader *)((char *)o + roundedSize);
         struct ObjectHeader * following = o->_next;
         following->_prev = h;
