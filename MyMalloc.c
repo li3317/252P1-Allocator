@@ -1,5 +1,8 @@
 //
 // CS252: MyMalloc Project
+// Project implementation completed by
+// Christopher Von Hoene
+// 1/22/16
 //
 // The current implementation gets memory from the OS
 // every time memory is requested and never frees memory.
@@ -127,7 +130,8 @@ void initialize()
   }
 
   pthread_mutex_init(&mutex, NULL);
-  void * _mem = getMemoryFromOS( ArenaSize + (2*sizeof(struct ObjectHeader)) + (2*sizeof(struct ObjectFooter)) );
+  void * _mem = getMemoryFromOS( ArenaSize + (2*sizeof(struct ObjectHeader)) + 
+                (2*sizeof(struct ObjectFooter)) );
 
   // In verbose mode register also printing statistics at exit
   atexit( atExitHandlerInC );
@@ -153,7 +157,8 @@ void initialize()
   temp = (char *)_mem + sizeof(struct ObjectFooter) + sizeof(struct ObjectHeader) + ArenaSize;
   struct ObjectFooter * currentFooter = (struct ObjectFooter *) temp;
   _freeList = &_freeListSentinel;
-  currentHeader->_objectSize = ArenaSize + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter); // 2MB + header and footer size
+  currentHeader->_objectSize = ArenaSize + sizeof(struct ObjectHeader) + 
+                                sizeof(struct ObjectFooter); // 2MB + header and footer size
   currentHeader->_allocated = 0;
   currentHeader->_next = _freeList;
   currentHeader->_prev = _freeList;
@@ -180,11 +185,13 @@ void * allocateObject( size_t size )
 
     // Add the ObjectHeader/Footer to the size and round the total size up to a multiple of
     // 8 bytes for alignment.
-    size_t roundedSize = (size + sizeof(struct ObjectHeader) + sizeof(struct ObjectFooter) + 7) & ~7;
+    size_t roundedSize = (size + sizeof(struct ObjectHeader) + 
+                            sizeof(struct ObjectFooter) + 7) & ~7;
 
     // Get a block from the freelist that's large enough
     struct ObjectHeader * o = getValidBlock(roundedSize);
-    struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + roundedSize - sizeof(struct ObjectFooter));
+    struct ObjectFooter * f = (struct ObjectFooter *)((char *)o + 
+                                roundedSize - sizeof(struct ObjectFooter));
 
     // Now cut the block into the part we need and the remainder
     if (o->_objectSize > MIN_SIZE + roundedSize) {
@@ -207,12 +214,7 @@ void * allocateObject( size_t size )
     o->_allocated = 1;
     f->_allocated = 1;
 
-    // Naively get memory from the OS every time
-    //void * _mem = getMemoryFromOS( roundedSize );
-
-    // Store the size in the header
-    //struct ObjectHeader * o = (struct ObjectHeader *) _mem;
-
+    // Set object size
     o->_objectSize = roundedSize;
 
     pthread_mutex_unlock(&mutex);
@@ -230,12 +232,16 @@ void * allocateObject( size_t size )
 // Fortunately, this is already accounted for.
 struct ObjectHeader * getValidBlock(size_t size)
 {
+    // Get the first element from the list
     struct ObjectHeader * current = _freeList->_next;
 
+    // Move through until you either find a piece big enough
+    // or go all the way through the list
     while (current != _freeList)
     {
         if (current->_objectSize >= size)
         {
+            // return the first block large enough
             return current;
         }
         current = current->_next;
@@ -247,10 +253,10 @@ struct ObjectHeader * getValidBlock(size_t size)
         // Create a new one
 
         int request = ArenaSize + 2*sizeof(struct ObjectHeader) + 2*sizeof(struct ObjectFooter);
-        if (size > request) request = size;
+        if (size > request) request = size; // This should really never happen
         struct ObjectHeader * chunk = getFencedChunk(request);
+
         // Add it to the free list
-        
         if (chunk < _freeList->_next) {
             // Add to beginning of list
             struct ObjectHeader * n = _freeList->_next;
@@ -286,6 +292,7 @@ struct ObjectHeader * getValidBlock(size_t size)
     return current;
 }
 
+// Put the memory taken up by an object back into the free list.
 void freeObject( void * ptr )
 {
     // Add this memory block back into the freelist
@@ -295,7 +302,8 @@ void freeObject( void * ptr )
   
     // Get header and footer of object
     struct ObjectHeader * header = (struct ObjectHeader *)((char *)ptr - sizeof(struct ObjectHeader));
-    struct ObjectFooter * footer = (struct ObjectFooter *)((char *)header + header->_objectSize - sizeof(struct ObjectFooter));
+    struct ObjectFooter * footer = (struct ObjectFooter *)((char *)header + 
+                                    header->_objectSize - sizeof(struct ObjectFooter));
 
     // Deallocate memory
     header->_allocated = 0;
@@ -303,7 +311,6 @@ void freeObject( void * ptr )
 
     // Get first memory block in free list following this one
     struct ObjectHeader * following = _freeList->_next;
-
     while (following < header && following != _freeList) {
         following = following->_next;
     }
@@ -320,7 +327,7 @@ void freeObject( void * ptr )
     // and coalesce it if necessary
     // A note on this: memory blocks should never be allocated if
     // they are in the free list, but we still need to check anyway
-    // to make sure that wedon' coalesce the sentinel. That would be
+    // to make sure that we don't coalesce the sentinel. That would be
     // bad.
     if ((char *)preceding + preceding->_objectSize == (char *)header && !preceding->_allocated) {
         preceding->_objectSize += header->_objectSize;
@@ -331,7 +338,8 @@ void freeObject( void * ptr )
     }
 
     if ((char *)header + header->_objectSize == (char *)following && !following->_allocated) {
-        struct ObjectFooter * ff = (struct ObjectFooter *)((char *)following + following->_objectSize - sizeof(struct ObjectFooter));
+        struct ObjectFooter * ff = (struct ObjectFooter *)((char *)following + 
+                                    following->_objectSize - sizeof(struct ObjectFooter));
         header->_objectSize += following->_objectSize;
         ff->_objectSize += header->_objectSize;
         header->_next = following->_next;
@@ -342,11 +350,14 @@ void freeObject( void * ptr )
 
 }
 
+// Return a tidily formatted block of memory from the OS
+// including appropriate headers and footers
 struct ObjectHeader * getFencedChunk(size_t size)
 {
     void * _mem = getMemoryFromOS(size);
 
     // establish fence posts
+
     // footer
     struct ObjectFooter * fencepost1 = (struct ObjectFooter *)_mem;
     fencepost1->_allocated = 1;
@@ -361,8 +372,10 @@ struct ObjectHeader * getFencedChunk(size_t size)
     fencepost2->_prev = NULL;
 
     // Now put in the actual header and footer and initialize them
-    struct ObjectHeader * h = (struct ObjectHeader *)((char *)fencepost1 + sizeof(struct ObjectFooter));
-    struct ObjectFooter * f = (struct ObjectFooter *)((char *)fencepost2 - sizeof(struct ObjectFooter));
+    struct ObjectHeader * h = (struct ObjectHeader *)
+                                ((char *)fencepost1 + sizeof(struct ObjectFooter));
+    struct ObjectFooter * f = (struct ObjectFooter *)
+                                ((char *)fencepost2 - sizeof(struct ObjectFooter));
     h->_objectSize = size - sizeof(struct ObjectHeader) - sizeof(struct ObjectFooter);
     h->_allocated = 0;
     f->_objectSize = h->_objectSize;
